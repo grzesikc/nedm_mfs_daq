@@ -1,52 +1,62 @@
 #include <iostream>
-#include <fcntl.h>
+//#include <stdio.h>
+//#include <fcntl.h>
 #include <unistd.h>
-#include <string>
+//#include <string>
 
-#include "rs232.h"
+//#include "rs232.h"
+#include "ch_time.h"
+#include "serialdevice.h"
 
 using namespace std;
 
 int main()
 {
+    int fd;
     string device_name = "/dev/ttyUSB0";
-    int device = open(device_name.c_str(),O_RDWR, O_APPEND);
-    if (device == -1)
-    {
-        cout << "can not open device: " << device_name << endl;
-        return -1;
-    }
+
+    SerialDevice *device;
+    device->Init(fd, device_name);
 
     int return_value = 0;
-//    string command = "*IDN?\n";
-//    return_value = write(device, command.c_str(), command.length());
-//    usleep(100000);
-//    command = "*RST\n";
-//    return_value = write(device, command.c_str(), command.length());
-//    command = "ROUT:SCAN (@101,102,103)\n";
-
-//    usleep(100000);
-    string command = "MEAS:VOLT:DC? (@101,102,103)\n";
-    string output_string;
-    return_value = write(device, command.c_str(), command.length());
-    char* output_value = new char [32];
-    usleep(200000);
-    int n = 0;
-//    !!!!!!!!!!!!!!!!!!!!!!!!
-//    make sure the values are correctly read out
-
-    do
-    {
-        n = read(device, output_value, 32);
-        output_string.append(n, output_value[0]);
-    }while( output_string.back() != '\r' && n > 0);
-
-    cout << "Output: " << output_string << endl;
-
+    string command = "*CLS\n";
+    return_value = write(fd, command.c_str(), command.length());
     if (return_value == -1)
     {
         cout << "can not write to device: " << device_name << endl;
         return -1;
     }
+
+    string output_string;
+    char* output_value = new char [32];
+    int n = 0;
+    int n_rocycles = 10;
+    string scan_count = "TRIG:COUN ";
+    scan_count += to_string(n_rocycles);
+    scan_count += "\n";
+
+    command = "ROUT:SCAN (@101,102,103)\n";
+    return_value = write(fd, command.c_str(), command.length());
+    command = "CONF:VOLT:DC 10,0.000022, (@101,102,103)\n";
+    return_value = write(fd, command.c_str(), command.length());
+    command = scan_count.c_str();
+    return_value = write(fd, command.c_str(), command.length());
+
+    chTimerTimestamp start, stop;
+    chTimerGetTime(&start);
+    command = "READ?\n";
+    return_value = write(fd, command.c_str(), command.length());
+
+    do
+    {
+        n = read(fd, output_value, 1);
+        output_string.append(n, output_value[0]);
+    }while (output_string.back() != '\n' && n > 0);
+
+    chTimerGetTime(&stop);
+    double time = chTimerElapsedTime(&start, &stop);
+
+    cout << "Output: " << output_string << endl;
+    cout << "Time: " << time << "s" << endl;
     return return_value;
 }
